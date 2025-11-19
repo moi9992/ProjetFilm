@@ -5,8 +5,20 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Permissions Romance
-$canSeeRomance = isUserMajeur();
+// ➡️ NOUVEAU BLOC : Définition de l'état de connexion et de la permission Romance
+// 1. Détermine si l'utilisateur est connecté (adaptez la variable si nécessaire)
+$isLoggedIn = isset($_SESSION['isLog']) && $_SESSION['isLog'] === true; 
+
+// 2. Détermine si l'utilisateur peut voir la Romance (doit être connecté ET majeur)
+$canSeeRomance = $isLoggedIn && isUserMajeur(); 
+
+// 3. Prépare le paramètre d'exclusion pour l'API TMDB
+$exclusionGenres = '';
+if (!$canSeeRomance) {
+    // Si l'utilisateur est mineur ou déconnecté, on exclut l'ID de la Romance (10749)
+    $exclusionGenres = '10749'; 
+}
+// FIN DU NOUVEAU BLOC
 
 // Lecture paramètres POST
 $page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
@@ -16,16 +28,24 @@ $selectedGenre = !empty($_POST['genre']) && is_numeric($_POST['genre'])
 
 // Récupération des films
 if ($selectedGenre) {
+    // Cas 1 : Filtre par Genre sélectionné
     $data = tmdbRequest('/discover/movie', [
         'with_genres' => $selectedGenre,
         'page' => $page,
         'sort_by' => 'popularity.desc',
-        'language' => 'fr-FR'
+        'language' => 'fr-FR',
+        // ➡️ AJOUT CLÉ pour l'exclusion API et éviter les trous lors du filtrage par genre
+        'without_genres' => $exclusionGenres 
     ]);
 } else {
-    $data = tmdbRequest('/movie/popular', [
+    // Cas 2 : Affichage par défaut (Films Populaire/Découverte)
+    // On utilise /discover/movie pour pouvoir utiliser without_genres
+    $data = tmdbRequest('/discover/movie', [
         'page' => $page,
-        'language' => 'fr-FR'
+        'sort_by' => 'popularity.desc', // Maintien du tri par popularité par défaut
+        'language' => 'fr-FR',
+        // ➡️ AJOUT CLÉ pour l'exclusion API et éviter les trous sur la page principale
+        'without_genres' => $exclusionGenres 
     ]);
 }
 
@@ -37,16 +57,20 @@ if (!$data || empty($data['results'])) {
 $items = $data['results'];
 $totalPages = $data['total_pages'] ?? 1;
 
-// Filtre romance si mineur
-$filtered = [];
-foreach ($items as $movie) {
-    if (!$canSeeRomance && in_array(10749, $movie['genre_ids'] ?? [])) continue;
-    $filtered[] = $movie;
-}
+// ➡️ SUPPRESSION DU FILTRE ROMANCE PHP QUI CRÉAIT LES TROUS
+// Les résultats sont déjà filtrés par l'API (without_genres)
+$filtered = $items; 
 
 if (empty($filtered)) {
     echo "<p class='text-danger'>Aucun film disponible pour ce critère.</p>";
     exit;
+}
+
+// Tri par Score (du meilleur au pire)
+if (!empty($filtered)) {
+    usort($filtered, function ($a, $b) {
+        return $b['vote_average'] <=> $a['vote_average'];
+    });
 }
 
 // 🔹 AFFICHAGE HTML DES FILMS
@@ -116,4 +140,3 @@ if ($totalPages > 1) {
 
     echo "</ul></nav></div>";
 }
-

@@ -39,7 +39,6 @@ if (session_status() === PHP_SESSION_NONE) {
                     <option value="18">Drame</option>
                     <option value="14">Fantastique</option>
                     <option value="27">Horreur</option>
-                    <option value="10749">Romance</option>
                     <option value="878">Science-fiction</option>
                     <option value="53">Thriller</option>
                 </select>
